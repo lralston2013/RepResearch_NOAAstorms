@@ -13,17 +13,18 @@ knitr::opts_chunk$set(echo = TRUE)
 ### Synopsis: what I did and what I found 
 
 ### Data Processing
-```{r dataprocessing, echo=TRUE, message=FALSE}
+```{r dataprocessing, message=FALSE}
 # Load packages
 library(dplyr)
 library(ggplot2)
 library(lubridate)
+library(forcats)
 
 # Download the dataset given
-#if(!file.exists("./data")){dir.create("./data")}
-#fileurl <- "https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2"
+if(!file.exists("./data")){dir.create("./data")}
+fileurl <- "https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2"
 #download.file(fileurl, destfile = "./data/NOAAstorm.csv.bz2")
-
+  
 # Read dataset
 data <- read.csv("./data/NOAAstorm.csv.bz2")
 
@@ -33,7 +34,7 @@ data$year <- year(data$date)
 
 # Quick clean-up of EVTYPE into new event variable data$event
 data$event <- toupper(data$EVTYPE)
-data$event <- replace(data$event, grep("COAST", data$event), "COASTAL FLOOD") # replace all occurrences of "COAST" as "COASTAL FLOODS"
+data$event <- replace(data$event, grep("COAST", data$event), "COASTAL FLOOD") # replace all occurrences of "COAST" as "COASTAL FLOODS" etc
 data$event <- replace(data$event, grep("BLIZZARD", data$event), "BLIZZARD")
 data$event <- replace(data$event, grep("EXTREME", data$event), "EXTREME C")
 data$event <- replace(data$event, grep("COLD", data$event), "COLD/WIND CHILL")
@@ -47,13 +48,15 @@ data$event <- replace(data$event, grep("MARINE TSTM WIND", data$event), "MARINE 
 data$event <- replace(data$event, grep("RIP", data$event), "RIP CURRENT")
 data$event <- replace(data$event, grep("STRONG WIND", data$event), "STRONG WIND")
 data$event <- replace(data$event, grep("THUNDERSTORM WIND", data$event), "THUNDERSTORM WIND")
+data$event <- replace(data$event, grep("TSTM WIND", data$event), "THUNDERSTORM WIND")
 data$event <- replace(data$event, grep("TORNADO", data$event), "TORNADO")
 data$event <- replace(data$event, grep("FIRE", data$event), "WILDFIRE")
 data$event <- replace(data$event, grep("WINTER WEATHER", data$event), "WINTER WEATHER")
+
 ```
 
 ### Exploratory Analysis
-```{r dataexploration, echo=TRUE}
+```{r dataexploration}
 # what type of events are captured in dataset?
 #table(data$EVTYPE) - this showed that data was quite messy in terms of encoding of event names, hence the quick clean up in data$event
 
@@ -66,16 +69,114 @@ head(select(data, event, date, FATALITIES, INJURIES, PROPDMG), 15)
 
 data <- arrange(data, desc(data$PROPDMG))
 head(select(data, event, date, FATALITIES, INJURIES, PROPDMG), 15)
+```
+This quick review of the data indicates that Heat, Excessive Heat and Tornadoes are the most costly single episode events in terms of fatalities; Tornadoes, Ice Storms, Floods and Hurricanes are the most costly single episode events in terms of injuries; and Thunderstorms, Floods and Tornadoes are the most costly single episode events in terms of property damage.
 
-hist(data$FATALITIES)
+However, this just considers single episode events. We can also consider what is most costly in terms of average cost per event type and total cost of each event type since 1950 (when data collection began).
 
-# use group_by to see mean and sum of fatality and property damage by event type - this will help show cost in terms rare events with high costs vs more frequent events with modest costs
+```{r dataupdate, results='hide'}
+# focus analysis on the 30 highest occurring events
+data$event <- fct_lump_n(factor(data$event), 30)
 
+# review occurrences of each type of event in dataset
+table(data$event)
 ```
 
 ### Results
 
-### Discussion
+```{r dataresults1a}
+data$count <- rep(1, length(data$event)) # use this to count number of each event type since 1950
+smdata <- data %>%
+  group_by(event) %>%
+  summarize(count = sum(count),
+            mFatality = mean(FATALITIES, na.rm = TRUE),
+            sFatality = sum(FATALITIES, na.rm = TRUE),
+            mInjuries = mean(INJURIES, na.rm = TRUE),
+            sInjuries = sum(INJURIES, na.rm = TRUE),
+            mPropdmg = mean(PROPDMG, na.rm = TRUE),
+            sPropdmg = sum(PROPDMG, na.rm = TRUE),
+            )
+
+smdata <- arrange(smdata, desc(smdata$mFatality))
+head(select(smdata, event, mFatality, mInjuries, mPropdmg), 15)
+```
+
+This shows us that in terms of population cost heat and excessive heat are the most deadly type of event on average. 
+
+```{r dataresults1b}
+smdata <- arrange(smdata, desc(smdata$mInjuries))
+head(select(smdata, event, mFatality, mInjuries, mPropdmg), 15)
+```
+
+Heat and excessive heat are also the most costly type of event on average in terms of injuries inflicted. Tornadoes and ice storms on average contribute high costs too (third and fourth most costly, respectively).
+
+```{r dataresults1c}
+smdata <- arrange(smdata, desc(smdata$mPropdmg))
+head(select(smdata, event, mFatality, mInjuries, mPropdmg), 15)
+
+```
+ 
+Tropical storms and tornadoes cause the greatest economic damage on average (measured through property damage costs), but costs are also high over the next 7 event types:
+
+```{r dataresults2, fig.height=6, echo=FALSE}
+plotdata <- filter(smdata, smdata$mPropdmg > 20)
+par(mai=c(1,2,1,1))
+barplot(plotdata$mPropdmg, names=plotdata$event,
+        main = "Mean Property Damage Costs by Event Type",
+        sub = "(Damage Costs above 20 USD)",
+        col = "red", xlab = "USD cost", horiz=TRUE, las=1,
+        cex.names=0.5)
+```
+
+Next I look at the total costs by event type since 1950.
+
+Because Tornadoes, Floods and Thunderstorms occur with some of the highest frequencies, these events have incurred greatest property damage costs since 1950: 
+
+```{r dataresults4, fig.height=6}
+par(mai=c(1,2,1,1))
+plotdata <- smdata %>%
+  arrange(desc(count)) %>%
+  filter(count > 1000) 
+barplot(plotdata$count, names=plotdata$event,
+        main = "Frequency of each Event Type since 1950",
+        col = "red", horiz=TRUE, las=1, cex.names=0.5)
+```
+
+```{r dataresults6, fig.height=6}
+par(mai=c(1,2,1,1))
+plotdata <- smdata %>%
+  arrange(desc(sPropdmg)) %>%
+  filter(sPropdmg > 20000) 
+barplot(plotdata$sPropdmg, names=plotdata$event,
+        main = "Total Property Damage Cost by Event Type",
+        col = "red", horiz=TRUE, las=1, cex.names=0.5)
+```
+
+Given the frequency of tornadoes these has contributed a significant fatality cost and, even though a more rare event, excessive heat has contributed the second highest total fatality cost.
+
+```{r dataresults5, fig.height=6}
+par(mai=c(1,2,1,1))
+plotdata <- smdata %>%
+  arrange(desc(sFatality)) %>%
+  filter(sFatality > 10) 
+barplot(plotdata$sFatality, names=plotdata$event,
+        main = "Total No. of Deaths by Event Type",
+        col = "red", horiz=TRUE, las=1, cex.names=0.5)
+```
+### Supplementary Materials
+
+These tables shows total population and property damage costs by event type since 1950:
+
+```{r dataresults3}
+smdata <- arrange(smdata, desc(smdata$sFatality))
+head(select(smdata, event, count, sFatality, sInjuries, sPropdmg), 15)
+
+smdata <- arrange(smdata, desc(smdata$sInjuries))
+head(select(smdata, event, count, sFatality, sInjuries, sPropdmg), 15)
+
+smdata <- arrange(smdata, desc(smdata$sPropdmg))
+head(select(smdata, event, count, sFatality, sInjuries, sPropdmg), 15)
+```
 
 
 
