@@ -1,0 +1,82 @@
+---
+short-title: "RepResearch_NOAAstorms"
+author: "lralston2013"
+date: "4/8/2021"
+output: html_document
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Data Analysis on NOAA Storm Database: which events are most harmful to population health? which events have greatest economic consequences?
+
+### Synopsis: what I did and what I found 
+
+### Data Processing
+```{r dataprocessing, echo=TRUE, message=FALSE}
+# Load packages
+library(dplyr)
+library(ggplot2)
+library(lubridate)
+
+# Download the dataset given
+#if(!file.exists("./data")){dir.create("./data")}
+#fileurl <- "https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2"
+#download.file(fileurl, destfile = "./data/NOAAstorm.csv.bz2")
+
+# Read dataset
+data <- read.csv("./data/NOAAstorm.csv.bz2")
+
+# Convert event date to date class (use BGN_DATE)
+data$date <- as.Date(strptime(data$BGN_DATE, format="%m/%d/%Y %H:%M:%S"))
+data$year <- year(data$date)
+
+# Quick clean-up of EVTYPE into new event variable data$event
+data$event <- toupper(data$EVTYPE)
+data$event <- replace(data$event, grep("COAST", data$event), "COASTAL FLOOD") # replace all occurrences of "COAST" as "COASTAL FLOODS"
+data$event <- replace(data$event, grep("BLIZZARD", data$event), "BLIZZARD")
+data$event <- replace(data$event, grep("EXTREME", data$event), "EXTREME C")
+data$event <- replace(data$event, grep("COLD", data$event), "COLD/WIND CHILL")
+data$event <- replace(data$event, grep("EXTREME", data$event), "EXTREME COLD/WIND CHILL")
+data$event <- replace(data$event, grep("FLASH FLOOD", data$event), "FLASH FLOOD")
+data$event <- replace(data$event, grep("HAIL", data$event), "HAIL")
+data$event <- replace(data$event, grep("HIGH WIND", data$event), "HIGH WIND")
+data$event <- replace(data$event, grep("HURRICANE", data$event), "HURRICANE")
+data$event <- replace(data$event, grep("LAKE EFFECT", data$event), "LAKE-EFFECT SNOW")
+data$event <- replace(data$event, grep("MARINE TSTM WIND", data$event), "MARINE THUNDERSTORM WIND")
+data$event <- replace(data$event, grep("RIP", data$event), "RIP CURRENT")
+data$event <- replace(data$event, grep("STRONG WIND", data$event), "STRONG WIND")
+data$event <- replace(data$event, grep("THUNDERSTORM WIND", data$event), "THUNDERSTORM WIND")
+data$event <- replace(data$event, grep("TORNADO", data$event), "TORNADO")
+data$event <- replace(data$event, grep("FIRE", data$event), "WILDFIRE")
+data$event <- replace(data$event, grep("WINTER WEATHER", data$event), "WINTER WEATHER")
+```
+
+### Exploratory Analysis
+```{r dataexploration, echo=TRUE}
+# what type of events are captured in dataset?
+#table(data$EVTYPE) - this showed that data was quite messy in terms of encoding of event names, hence the quick clean up in data$event
+
+# before reducing data further e.g combining event categories, order data by fatalities, injuries and property damage to get a sense of which events are most costly
+data <- arrange(data, desc(data$FATALITIES))
+head(select(data, event, date, FATALITIES, INJURIES, PROPDMG), 15)
+
+data <- arrange(data, desc(data$INJURIES))
+head(select(data, event, date, FATALITIES, INJURIES, PROPDMG), 15)
+
+data <- arrange(data, desc(data$PROPDMG))
+head(select(data, event, date, FATALITIES, INJURIES, PROPDMG), 15)
+
+hist(data$FATALITIES)
+
+# use group_by to see mean and sum of fatality and property damage by event type - this will help show cost in terms rare events with high costs vs more frequent events with modest costs
+
+```
+
+### Results
+
+### Discussion
+
+
+
+
