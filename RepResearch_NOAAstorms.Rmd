@@ -10,10 +10,11 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ## Data Analysis on NOAA Storm Database: which events are most harmful to population health? which events have greatest economic consequences?
 
-### Synopsis: what I did and what I found 
+### Synopsis: 
+This analysis uses the NOAA Storm Database of recorded extreme weather events between 1950 and 2011 to consider which types of weather events are most harmful to population health and which have greatest economic consequences. To measure impact on population health, the number of fatalities and injuries directly caused by weather events are considered, while to measure economic impact, property damage is considered. The analysis considers three different metrics of measuring harm: single episode events, mean impacts of each type of weather event and the total impact of each type of weather event over 1950-2011. In terms of single episode events several Tornadoes and Heat or Excessive Heat events have the highest recorded fatalities (over 50 deaths per event), several Tornadoes and one Ice Storm incur highest number of injuries (over 1000 injuries per event), and Hurricanes, Storm Surges and Flood related events have incurred the highest property damage costs (over 10B USD). In terms of mean impacts per event, heat and excessive heat are the most deadly type of event on population health, while Tropical storms, Floods, and Wildfires cause the greatest economic damage on average. Because Floods, Tornadoes, Hail and Thunderstorms occur with some of the highest frequencies, these events have incurred greatest total property damage costs since 1950 and Floods and Tornadoes have contributed a large proportion of the total fatalities. However, even though a more rare event, excessive heat has contributed the second highest total fatality cost. 
 
 ### Data Processing
-```{r dataprocessing, message=FALSE}
+```{r dataprocessing, message=FALSE, cache = TRUE}
 # Load packages
 library(dplyr)
 library(ggplot2)
@@ -53,6 +54,28 @@ data$event <- replace(data$event, grep("TORNADO", data$event), "TORNADO")
 data$event <- replace(data$event, grep("FIRE", data$event), "WILDFIRE")
 data$event <- replace(data$event, grep("WINTER WEATHER", data$event), "WINTER WEATHER")
 
+# apply magnitude to property damage costs (this takes a long time to run)
+data$propdmg <- vector(mode="numeric", length=length(data$PROPDMG))
+for (i in seq_along(data$PROPDMG)) {
+  # print(i)
+  if (data$PROPDMGEXP[i]=="H") {
+    data$propdmg[i] <- data$PROPDMG[i]*100
+  } 
+  else if (data$PROPDMGEXP[i]=="K") {
+    data$propdmg[i] <- data$PROPDMG[i]*1000
+  }
+  else if (data$PROPDMGEXP[i]=="M") {
+    data$propdmg[i] <- data$PROPDMG[i]*1000000
+  }
+  else if (data$PROPDMGEXP[i]=="B") {
+    data$propdmg[i] <- data$PROPDMG[i]*1000000000
+  }
+  else {
+    data$propdmg[i] <- data$PROPDMG[i]
+  }
+  #print(data$propdmg[i])
+}
+
 ```
 
 ### Exploratory Analysis
@@ -62,15 +85,15 @@ data$event <- replace(data$event, grep("WINTER WEATHER", data$event), "WINTER WE
 
 # before reducing data further e.g combining event categories, order data by fatalities, injuries and property damage to get a sense of which events are most costly
 data <- arrange(data, desc(data$FATALITIES))
-head(select(data, event, date, FATALITIES, INJURIES, PROPDMG), 15)
+head(select(data, event, date, FATALITIES, INJURIES, propdmg), 15)
 
 data <- arrange(data, desc(data$INJURIES))
-head(select(data, event, date, FATALITIES, INJURIES, PROPDMG), 15)
+head(select(data, event, date, FATALITIES, INJURIES, propdmg), 15)
 
-data <- arrange(data, desc(data$PROPDMG))
-head(select(data, event, date, FATALITIES, INJURIES, PROPDMG), 15)
+data <- arrange(data, desc(data$propdmg))
+head(select(data, event, date, FATALITIES, INJURIES, propdmg), 15)
 ```
-This quick review of the data indicates that Heat, Excessive Heat and Tornadoes are the most costly single episode events in terms of fatalities; Tornadoes, Ice Storms, Floods and Hurricanes are the most costly single episode events in terms of injuries; and Thunderstorms, Floods and Tornadoes are the most costly single episode events in terms of property damage.
+This quick review of the data indicates that Heat, Excessive Heat and Tornadoes are the most costly single episode events in terms of fatalities; Tornadoes, Ice Storms, Floods and Hurricanes are the most costly single episode events in terms of injuries; and Hurricanes, Storm Surges and Floods are the most costly single episode events in terms of property damage.
 
 However, this just considers single episode events. We can also consider what is most costly in terms of average cost per event type and total cost of each event type since 1950 (when data collection began).
 
@@ -93,15 +116,15 @@ smdata <- data %>%
             sFatality = sum(FATALITIES, na.rm = TRUE),
             mInjuries = mean(INJURIES, na.rm = TRUE),
             sInjuries = sum(INJURIES, na.rm = TRUE),
-            mPropdmg = mean(PROPDMG, na.rm = TRUE),
-            sPropdmg = sum(PROPDMG, na.rm = TRUE),
+            mPropdmg = mean(propdmg, na.rm = TRUE),
+            sPropdmg = sum(propdmg, na.rm = TRUE),
             )
 
 smdata <- arrange(smdata, desc(smdata$mFatality))
 head(select(smdata, event, mFatality, mInjuries, mPropdmg), 15)
 ```
 
-This shows us that in terms of population cost heat and excessive heat are the most deadly type of event on average. 
+This shows us that in terms of population cost, heat and excessive heat are the most deadly type of event on average. 
 
 ```{r dataresults1b}
 smdata <- arrange(smdata, desc(smdata$mInjuries))
@@ -116,7 +139,7 @@ head(select(smdata, event, mFatality, mInjuries, mPropdmg), 15)
 
 ```
  
-Tropical storms and tornadoes cause the greatest economic damage on average (measured through property damage costs), but costs are also high over the next 7 event types:
+Tropical storms, Floods, and Wildfires cause the greatest economic damage on average (measured through property damage costs), but costs remain over 200,000 USD on average over the next 8 event types:
 
 ```{r dataresults2, fig.height=6, echo=FALSE}
 plotdata <- filter(smdata, smdata$mPropdmg > 20)
@@ -130,39 +153,36 @@ barplot(plotdata$mPropdmg, names=plotdata$event,
 
 Next I look at the total costs by event type since 1950.
 
-Because Tornadoes, Floods and Thunderstorms occur with some of the highest frequencies, these events have incurred greatest property damage costs since 1950: 
+Because Floods,Tornadoes, Hail and Thunderstorms occur with some of the highest frequencies, these events have incurred greatest total property damage costs since 1950.
+
+Given the frequency of tornadoes these has contributed a significant fatality cost and, even though a more rare event, excessive heat has contributed the second highest total fatality cost:
 
 ```{r dataresults4, fig.height=6}
-par(mai=c(1,2,1,1))
+par(mfrow = c(1, 3), mar = c(1,4,1,1), oma = c(0, 0, 0, 0))
+
 plotdata <- smdata %>%
   arrange(desc(count)) %>%
   filter(count > 1000) 
 barplot(plotdata$count, names=plotdata$event,
         main = "Frequency of each Event Type since 1950",
         col = "red", horiz=TRUE, las=1, cex.names=0.5)
-```
 
-```{r dataresults6, fig.height=6}
-par(mai=c(1,2,1,1))
 plotdata <- smdata %>%
   arrange(desc(sPropdmg)) %>%
-  filter(sPropdmg > 20000) 
+  filter(sPropdmg > 2000) 
 barplot(plotdata$sPropdmg, names=plotdata$event,
         main = "Total Property Damage Cost by Event Type",
         col = "red", horiz=TRUE, las=1, cex.names=0.5)
-```
 
-Given the frequency of tornadoes these has contributed a significant fatality cost and, even though a more rare event, excessive heat has contributed the second highest total fatality cost.
-
-```{r dataresults5, fig.height=6}
-par(mai=c(1,2,1,1))
 plotdata <- smdata %>%
   arrange(desc(sFatality)) %>%
-  filter(sFatality > 10) 
+  filter(sFatality > 5) 
 barplot(plotdata$sFatality, names=plotdata$event,
         main = "Total No. of Deaths by Event Type",
         col = "red", horiz=TRUE, las=1, cex.names=0.5)
 ```
+
+
 ### Supplementary Materials
 
 These tables shows total population and property damage costs by event type since 1950:
